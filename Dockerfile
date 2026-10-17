@@ -5,14 +5,25 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # Install dependencies
-# We install fastapi and uvicorn directly
 RUN pip install --no-cache-dir fastapi uvicorn
 
-# Copy the application code into the container
-COPY main.py .
+# Create a non-root user and group
+RUN groupadd -r appuser && useradd -r -g appuser appuser
 
-# Expose the port the app runs on
+# Copy application files
+COPY main.py names.py ./
+
+# Set ownership to appuser
+RUN chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
+
+# Define PORT environment variable with default 8000
+ENV PORT=8000
+
+# Expose port
 EXPOSE 8000
 
-# Command to run the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Command to run the application using $PORT environment variable
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT}"]

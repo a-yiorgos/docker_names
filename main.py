@@ -2,76 +2,32 @@ import os
 import random
 import socket
 from datetime import datetime
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from names import ADJECTIVES, SURNAMES
 
 app = FastAPI()
 
 # Global counter
 counter = 0
 
-# Adjectives and Surnames from Moby/namesgenerator
-ADJECTIVES = [
-    "admiring", "adoring", "affectionate", "agitated", "amazing", "angry", 
-    "awesome", "backstabbing", "berserk", "big", "boring", "clever", 
-    "compassionate", "condescending", "cranky", "dazzling", "determined", 
-    "distracted", "dreamy", "eager", "ecstatic", "elastic", "elated", 
-    "elegant", "eloquent", "epic", "fervent", "festive", "flamboyant", 
-    "focused", "friendly", "frosty", "funny", "gallant", "gifted", 
-    "goofy", "gracious", "happy", "hardcore", "heuristic", "hopeful", 
-    "hungry", "infallible", "inspiring", "jolly", "jovial", "keen", 
-    "kind", "laughing", "loving", "lucid", "magical", "mystifying", 
-    "modest", "musing", "naughty", "nervous", "nifty", "nostalgic", 
-    "objective", "optimistic", "peaceful", "pedantic", "pensive", 
-    "practical", "priceless", "quirky", "quizzical", "relaxed", 
-    "reverent", "romantic", "sad", "serene", "sharp", "silly", 
-    "sleepy", "stoic", "stupefied", "suspicious", "sweet", "tender", 
-    "thirsty", "trusting", "unruffled", "upbeat", "vibrant", "vigorous", 
-    "wizardly", "wonderful", "xenial", "youthful", "zealous", "zen"
-]
+def is_boring_wozniak_allowed() -> bool:
+    return os.getenv("BORING_WOZNIAK", "deny") == "allow"
 
-SURNAMES = [
-    "albattani", "allen", "almeida", "antonelli", "archimedes", "ardinghelli", 
-    "aryabhata", "austin", "babbage", "banach", "bardeen", "bartik", "bassi", 
-    "bell", "benz", "bhabha", "bhaskara", "blackwell", "bohr", "booth", 
-    "borg", "bose", "boyd", "brahmagupta", "brattain", "brown", "burnell", 
-    "cannon", "carson", "chandrasekhar", "chaplygin", "chatelet", "chatterjee", 
-    "chebyshev", "cohen", "colden", "cori", "cray", "curie", "darwin", 
-    "davinci", "dewdney", "dhawan", "diffie", "dijkstra", "dirac", "driscoll", 
-    "dubinsky", "easley", "edison", "einstein", "elion", "engelbart", 
-    "euclid", "euler", "fermat", "fermi", "feynman", "franklin", "galileo", 
-    "galois", "ganguly", "gates", "gauss", "goldberg", "goldstine", "goodall", 
-    "goldwasser", "gould", "greider", "grothendieck", "haibun", "hamilton", 
-    "heisenberg", "hermann", "heyrovsky", "hodgkin", "hoover", "hopper", 
-    "hugle", "hypatia", "ishizaka", "jackson", "jang", "jennings", "jepsen", 
-    "johnson", "joliot", "jones", "kalam", "kapitsa", "kare", "keldysh", 
-    "kepler", "khayyam", "khorana", "kilby", "kirch", "knuth", "kowalevski", 
-    "lalande", "lamarr", "lamport", "leavitt", "lederberg", "lehmann", 
-    "lewin", "liskov", "lovelace", "lumiere", "mahavira", "marconi", "meitner", 
-    "mendel", "mendeleev", "mcclintock", "mclean", "minsky", "mirzakhani", 
-    "montalcini", "moore", "morse", "murdock", "newton", "nightingale", 
-    "noether", "northcutt", "noyce", "panini", "pare", "pasteur", "payne", 
-    "perlman", "pike", "poincare", "polanyi", "poitras", "ptolemy", "raman", 
-    "ramanujan", "ride", "ritchie", "roentgen", "rosalind", "saha", "sammet", 
-    "sanderson", "satoshi", "shannon", "shaw", "shirley", "shockley", 
-    "sinoussi", "snyder", "solomon", "spence", "stallman", "stonebraker", 
-    "sutherland", "swanson", "swartz", "turing", "varahamihira", "visvesvaraya", 
-    "volhard", "wescoff", "wilcox", "wiles", "williams", "williamson", 
-    "wilson", "wozniak", "wright", "yalow", "yonath"
-]
-
-def generate_docker_name():
-    global counter
+def generate_docker_name() -> str:
     while True:
         adj = random.choice(ADJECTIVES)
         sur = random.choice(SURNAMES)
         name = f"{adj}_{sur}"
-        
-        # Check environment variable for "boring_wozniak" logic
-        if name == "boring_wozniak":
-            if os.getenv("BORING_WOZNIAK") == "allow":
-                return name
-            continue # Try again if not allowed
+        if name == "boring_wozniak" and not is_boring_wozniak_allowed():
+            continue
         return name
+
+def is_valid_combination(adj: str, sur: str) -> bool:
+    if adj not in ADJECTIVES or sur not in SURNAMES:
+        return False
+    if f"{adj}_{sur}" == "boring_wozniak" and not is_boring_wozniak_allowed():
+        return False
+    return True
 
 @app.get("/name")
 def get_name():
@@ -83,3 +39,31 @@ def get_name():
         "hostname": socket.gethostname(),
         "timestamp": datetime.now().isoformat()
     }
+
+@app.get("/name/{name_param}")
+def get_name_by_param(name_param: str):
+    if "_" in name_param:
+        adj, sur = name_param.split("_", 1)
+        if is_valid_combination(adj, sur):
+            return {"status": "OK", "name": name_param}
+        else:
+            raise HTTPException(status_code=404, detail="Invalid name combination")
+    else:
+        is_adj = name_param in ADJECTIVES
+        is_sur = name_param in SURNAMES
+
+        if not is_adj and not is_sur:
+            raise HTTPException(status_code=404, detail="Name component not found")
+
+        while True:
+            if is_adj:
+                sur = random.choice(SURNAMES)
+                adj = name_param
+            else:
+                adj = random.choice(ADJECTIVES)
+                sur = name_param
+
+            combo = f"{adj}_{sur}"
+            if combo == "boring_wozniak" and not is_boring_wozniak_allowed():
+                continue
+            return {"name": combo}
