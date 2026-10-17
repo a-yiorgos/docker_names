@@ -9,7 +9,7 @@ WORKDIR /app
 RUN pip install --no-cache-dir fastapi uvicorn
 
 # Copy the application code into the container
-COPY main.py .
+COPY main.py names.py ./
 
 # Expose the port the app runs on
 EXPOSE 8000
